@@ -1,0 +1,7 @@
+node_modules
+.gitignore
+Dockerfile
+.dockerignore
+node-api/fastify-pdf/node_modules
+python-api/payroll-api/__pycache__
+python-api/payroll-api/.python-version

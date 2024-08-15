@@ -1,0 +1,10 @@
+addons
+python
+server
+.env
+letsencrypt
+logs
+backups
+.vscode
+node-api
+python-api

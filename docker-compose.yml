@@ -1,0 +1,64 @@
+#version: '3.1'
+services:
+  postgresql:    
+    build:
+      context: .
+      dockerfile: ./images/postgres/Dockerfile
+    tty: true
+    ports:
+      - "5432:5432"
+    environment:
+      #- POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD=postgres
+      #- POSTGRES_USER=postgres
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - db_data:/var/lib/postgresql/data/pgdata
+      - ./scripts:/opt/scripts
+      - ./backups:/backups
+    networks:
+      - net
+  web:
+    build:
+      context: .
+      dockerfile: ./images/odoo/Dockerfile
+    tty: true
+    networks:
+      - net
+    environment:
+      - ODOO_LOGGING_JSON=1
+      - AWS_HOST=http://minio:9000
+      - AWS_ACCESS_KEY_ID=fteKJnuYM8C0ZUplVn68
+      - AWS_SECRET_ACCESS_KEY=abAvwKQcfFYA9fLQIBd57e8yGlGBhl3XygjSN6TX
+      - AWS_BUCKETNAME={db}
+
+    ports:
+      - 8069:8069
+      - 8072:8072
+    volumes:
+      - web_data:/opt/data:rw
+      - ./addons:/opt/addons
+      - ./server:/opt/server
+      - ./logs:/opt/logs
+      - ./etc:/opt/etc
+  minio:
+    image: "minio/minio:RELEASE.2024-07-31T05-46-26Z"
+    command: server /mnt/data --console-address ":9001" 
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: 128Plus128=256
+    networks:
+      - net
+    volumes:
+      - /opt/s3/data:/mnt/data
+    ports:
+      - 9000:9000
+      - 9001:9001
+ 
+volumes:
+  web_data:
+  db_data:
+
+
+networks:
+  net:
