@@ -1,5 +1,48 @@
 #version: '3.1'
 services:
+  traefik:
+    image: "traefik:latest"
+    command:
+      - "--api=true"
+      - "--log=true"
+      - "--accesslog=true"
+      - "--log.level=ERROR"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=net"
+      - "--entrypoints.http.address=:80"
+      - "--entrypoints.https.address=:443"
+      # LetsEncrypt Staging Server - uncomment when testing
+      - --certificatesResolvers.letsencrypt.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=http
+      - --certificatesresolvers.letsencrypt.acme.email=${EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+    networks:
+      - net
+    labels:
+      # http
+      - traefik.enable=true
+      - traefik.http.routers.traefik-http.rule=Host(`${TRAEFIK_DOMAIN}`)
+      - traefik.http.routers.traefik-http.entrypoints=http
+      - traefik.http.routers.traefik-http.middlewares=traefik-http
+      # https
+      - traefik.http.routers.traefik.rule=Host(`${TRAEFIK_DOMAIN}`)
+      - traefik.http.routers.traefik.entrypoints=https
+      - traefik.http.routers.traefik.middlewares=auth
+      - traefik.http.routers.traefik.service=api@internal
+      - traefik.http.routers.traefik.tls=true
+      - traefik.http.routers.traefik.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.middlewares.traefik-http.redirectscheme.scheme=https
+      - traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_USER}:${TRAEFIK_PASSWORD_HASH}
+
+
   postgresql:    
     build:
       context: .
@@ -41,6 +84,70 @@ services:
       - ./server:/opt/server
       - ./logs:/opt/logs
       - ./etc:/opt/etc
+
+    labels:
+      - traefik.enable=true
+      #----------------------------------------------- routers for: odoo --------------------------------------------------
+      # http
+      - traefik.http.routers.odoo-http.rule=Host(`${ODOO_HOSTNAME}`)
+      - traefik.http.routers.odoo-http.entrypoints=http
+      - traefik.http.routers.odoo-http.middlewares=odoo-http
+      - traefik.http.routers.odoo-http.service=odoo
+      - traefik.http.middlewares.odoo-http.redirectscheme.scheme=https
+      # https
+      - traefik.http.routers.odoo-https.rule=Host(`${ODOO_HOSTNAME}`)
+      - traefik.http.routers.odoo-https.entrypoints=https
+      - traefik.http.routers.odoo-https.service=odoo
+      - traefik.http.routers.odoo-https.tls=true
+      - traefik.http.routers.odoo-https.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.routers.odoo-https.middlewares=gzip,sslheader,limit
+      - traefik.http.services.odoo.loadbalancer.server.port=8069
+      - traefik.http.middlewares.gzip.compress=true
+      - traefik.http.middlewares.sslheader.headers.customrequestheaders.X-Forwarded-Proto=https
+      - traefik.http.middlewares.limit.buffering.memRequestBodyBytes=20971520
+      - traefik.http.middlewares.limit.buffering.maxRequestBodyBytes=20971520
+      #----------------------------------------------- routers for: poll --------------------------------------------------
+      # http
+      - traefik.http.routers.poll-http.rule=Host(`${ODOO_HOSTNAME}`) && PathPrefix(`/websocket`)
+      - traefik.http.routers.poll-http.entrypoints=http
+      - traefik.http.routers.poll-http.middlewares=poll-http
+      - traefik.http.routers.poll-http.service=poll
+      - traefik.http.middlewares.poll-http.redirectscheme.scheme=https
+      # https
+      - traefik.http.routers.poll-https.rule=Host(`${ODOO_HOSTNAME}`) && PathPrefix(`/websocket`)
+      - traefik.http.routers.poll-https.entrypoints=https
+      - traefik.http.routers.poll-https.service=poll
+      - traefik.http.routers.poll-https.tls=true
+      - traefik.http.routers.poll-https.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.routers.poll-https.middlewares=gzip,sslheader,limit
+      - traefik.http.services.poll.loadbalancer.server.port=8072      
+
+  node:
+    image: node:20.16.0-bookworm-slim
+    tty: true
+    volumes:
+      - ./apps:/apps
+    networks:
+      - net
+    # ports:
+    #   - 5173:5173
+    labels:
+      - traefik.enable=true
+      #----------------------------------------------- routers for: apps --------------------------------------------------
+      # http
+      - traefik.http.routers.apps-http.rule=Host(`${ODOO_HOSTNAME}`) && PathPrefix(`/apps`)
+      - traefik.http.routers.apps-http.entrypoints=http
+      - traefik.http.routers.apps-http.middlewares=apps-http
+      - traefik.http.routers.apps-http.service=apps
+      - traefik.http.middlewares.apps-http.redirectscheme.scheme=https
+      # https
+      - traefik.http.routers.apps-https.rule=Host(`${ODOO_HOSTNAME}`) && PathPrefix(`/apps`)
+      - traefik.http.routers.apps-https.entrypoints=https
+      - traefik.http.routers.apps-https.service=apps
+      - traefik.http.routers.apps-https.tls=true
+      - traefik.http.routers.apps-https.tls.certresolver=${CERT_RESOLVER}
+#      - traefik.http.routers.apps-https.middlewares=gzip,sslheader,limit
+      - traefik.http.services.apps.loadbalancer.server.port=5173
   minio:
     image: "minio/minio:RELEASE.2024-07-31T05-46-26Z"
     command: server /mnt/data --console-address ":9001" 

@@ -1,10 +1,8 @@
 addons
-python
 server
 .env
 letsencrypt
 logs
 backups
 .vscode
-node-api
-python-api
+apps/applicant/node_modules
