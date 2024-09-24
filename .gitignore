@@ -6,3 +6,4 @@ logs
 backups
 .vscode
 apps/applicant/node_modules
+apps
