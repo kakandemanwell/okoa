@@ -9,7 +9,7 @@ services:
       - "--log.level=ERROR"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=net"
+      - "--providers.docker.network=gateway"
       - "--entrypoints.http.address=:80"
       - "--entrypoints.https.address=:443"
       # LetsEncrypt Staging Server - uncomment when testing
@@ -26,6 +26,7 @@ services:
       - ./letsencrypt:/letsencrypt
     networks:
       - net
+      - gateway
     labels:
       # http
       - traefik.enable=true
@@ -42,8 +43,7 @@ services:
       - traefik.http.middlewares.traefik-http.redirectscheme.scheme=https
       - traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_USER}:${TRAEFIK_PASSWORD_HASH}
 
-
-  postgresql:    
+  postgresql:
     build:
       context: .
       dockerfile: ./images/postgres/Dockerfile
@@ -68,6 +68,7 @@ services:
     tty: true
     networks:
       - net
+      - gateway
     environment:
       - ODOO_LOGGING_JSON=1
       - AWS_HOST=http://minio:9000
@@ -120,7 +121,7 @@ services:
       - traefik.http.routers.poll-https.tls=true
       - traefik.http.routers.poll-https.tls.certresolver=${CERT_RESOLVER}
       - traefik.http.routers.poll-https.middlewares=gzip,sslheader,limit
-      - traefik.http.services.poll.loadbalancer.server.port=8072      
+      - traefik.http.services.poll.loadbalancer.server.port=8072
 
   node:
     image: node:20.16.0-bookworm-slim
@@ -129,6 +130,7 @@ services:
       - ./apps:/apps
     networks:
       - net
+      - gateway
     # ports:
     #   - 5173:5173
     labels:
@@ -146,11 +148,11 @@ services:
       - traefik.http.routers.apps-https.service=apps
       - traefik.http.routers.apps-https.tls=true
       - traefik.http.routers.apps-https.tls.certresolver=${CERT_RESOLVER}
-#      - traefik.http.routers.apps-https.middlewares=gzip,sslheader,limit
+      #      - traefik.http.routers.apps-https.middlewares=gzip,sslheader,limit
       - traefik.http.services.apps.loadbalancer.server.port=5173
   minio:
     image: "minio/minio:RELEASE.2024-07-31T05-46-26Z"
-    command: server /mnt/data --console-address ":9001" 
+    command: server /mnt/data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: 128Plus128=256
@@ -161,11 +163,13 @@ services:
     ports:
       - 9000:9000
       - 9001:9001
- 
+
 volumes:
   web_data:
   db_data:
 
-
 networks:
   net:
+  gateway:
+    external: true
+    name: odoo-stack-gateway
